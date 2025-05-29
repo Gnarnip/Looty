@@ -1,0 +1,40 @@
+plugins {
+    id 'java'
+    id 'net.minecraftforge.gradle' version '5.1.+'
+}
+
+group = 'com.example'
+version = '1.0'
+//noinspection GroovyUnusedAssignment
+archivesBaseName = 'looty'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17) // Explicitly specify Java 17
+    }
+}
+
+minecraft {
+    mappings channel: 'official', version: '1.20.1'
+
+    runs {
+        server {
+            workingDirectory = project.file('run') // Server run configuration
+        }
+    }
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
+
+    // Override vulnerable dependencies with fixed versions
+    implementation 'com.google.guava:guava:32.1.2-jre'
+    implementation 'commons-io:commons-io:2.18.0'
+    implementation 'io.netty:netty-common:4.1.108.Final'
+    implementation 'io.netty:netty-handler:4.1.108.Final'
+    implementation 'org.apache.commons:commons-compress:1.27.1'
+    implementation 'com.google.code.gson:gson:2.8.9'
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
