@@ -1,0 +1,41 @@
+{
+  "COMMON": {
+    "minItems": 1,
+    "maxItems": 4,
+    "items": [
+      { "item": "minecraft:apple", "countMin": 1, "countMax": 2, "chance": 0.75 },
+      { "item": "minecraft:bread", "countMin": 1, "countMax": 3, "chance": 0.9 },
+      { "item": "minecraft:stick", "countMin": 2, "countMax": 5, "chance": 0.5 }
+    ]
+  },
+  "UNCOMMON": {
+    "minItems": 1,
+    "maxItems": 3,
+    "items": [
+      { "item": "minecraft:iron_ingot", "countMin": 1, "countMax": 3, "chance": 0.7 },
+      { "item": "minecraft:gold_ingot", "countMin": 1, "countMax": 2, "chance": 0.4 }
+    ]
+  },
+  "RARE": {
+    "minItems": 1,
+    "maxItems": 2,
+    "items": [
+      { "item": "minecraft:diamond", "countMin": 1, "countMax": 1, "chance": 0.6 }
+    ]
+  },
+  "LEGENDARY": {
+    "minItems": 2,
+    "maxItems": 4,
+    "items": [
+      { "item": "minecraft:netherite_ingot", "countMin": 1, "countMax": 2, "chance": 0.5 },
+      { "item": "minecraft:totem_of_undying", "countMin": 1, "countMax": 1, "chance": 0.3 },
+      {
+        "item": "minecraft:diamond_sword",
+        "countMin": 1,
+        "countMax": 1,
+        "chance": 0.4,
+        "nbt": "{Enchantments:[{id:\"minecraft:sharpness\",lvl:5s}]}"
+      }
+    ]
+  }
+}
