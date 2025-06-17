@@ -1,0 +1,7 @@
+{
+  "example": {
+    "center": [100, 64, -200],
+    "radius": 300,
+    "rarity": "RARE"
+  }
+}

@@ -1,0 +1,21 @@
+modLoader="javafml"
+loaderVersion="[47,)" # Compatible with Forge 47.x+
+license="MIT"
+
+[[mods]]
+modId="looty" # Must match the MODID in your main mod class
+version="1.0"
+displayName="Looty mod"
+authors="Hooshcow"
+description='''
+A mod that despawns/respawns chests on a timer once players interact with them.
+Loot is randomized and based on rarity, loaded from a JSON config.
+'''
+
+# Optional: Ensure Looty loads after other mods if they add items you want to use
+[[dependencies.looty]]
+modId="some_mod" # Replace with the actual mod ID you rely on (e.g., 'alexscaves', 'mekanism', etc.)
+mandatory=false
+versionRange="*"
+ordering="AFTER"
+side="BOTH"
