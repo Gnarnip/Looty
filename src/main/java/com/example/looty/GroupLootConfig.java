@@ -54,9 +54,9 @@ public class GroupLootConfig {
                 String lootTable = null;
                 if (obj.has("lootTable")) {
                     String lootStr = obj.get("lootTable").getAsString();
-                    ResourceLocation parsedLootTable = ResourceLocation.tryParse(lootStr);
-                    if (parsedLootTable != null) {
-                        lootTable = parsedLootTable.toString();
+                    boolean valid = ResourceLocation.isValidResourceLocation(lootStr);
+                    if (valid) {
+                        lootTable = lootStr;
                     } else {
                         LOGGER.warn("⚠ Invalid lootTable '{}' for group '{}'. Skipping it.", lootStr, group);
                     }

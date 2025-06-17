@@ -1,6 +1,5 @@
 package com.example.looty;
 
-import com.google.gson.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.logging.log4j.LogManager;
@@ -14,7 +13,8 @@ public class ChestDataHandler {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final File CHEST_DATA_FILE = new File("config/despawned_chests.dat");
     private static final File BLOCK_TYPE_FILE = new File("config/original_block_types.dat");
-    private static final File ALT_SPAWN_FILE = new File("config/looty/alternate_spawns.json");
+    private static final File CONFIG_DIR = new File("config/looty");
+    private static final File ORIGIN_MAPPING_FILE = new File(CONFIG_DIR, "origin_mappings.dat");
 
     // === Despawned Chests ===
 
@@ -70,53 +70,129 @@ public class ChestDataHandler {
         return map;
     }
 
-    // === Alternate Spawns (JSON) ===
+    // === Alternate Spawns ===
 
-    public static void saveAlternateSpawns(Map<BlockPos, List<BlockPos>> data) {
-        JsonObject root = new JsonObject();
+    private static void writeBlockPos(DataOutputStream out, BlockPos pos) throws IOException {
+        out.writeInt(pos.getX());
+        out.writeInt(pos.getY());
+        out.writeInt(pos.getZ());
+    }
 
-        for (Map.Entry<BlockPos, List<BlockPos>> entry : data.entrySet()) {
-            JsonArray coordsArray = new JsonArray();
-            for (BlockPos alt : entry.getValue()) {
-                coordsArray.add(serializeBlockPos(alt));
-            }
-            root.add(serializeBlockPos(entry.getKey()), coordsArray);
-        }
+    private static BlockPos readBlockPos(DataInputStream in) throws IOException {
+        int x = in.readInt();
+        int y = in.readInt();
+        int z = in.readInt();
+        return new BlockPos(x, y, z);
+    }
 
-        try {
-            File parent = ALT_SPAWN_FILE.getParentFile();
-            if (parent != null && !parent.exists()) parent.mkdirs();
+    public static void saveAlternateSpawns(Map<BlockPos, List<BlockPos>> map) {
+        File file = new File(CONFIG_DIR, "alternate_spawns.dat");
 
-            try (FileWriter writer = new FileWriter(ALT_SPAWN_FILE)) {
-                new GsonBuilder().setPrettyPrinting().create().toJson(root, writer);
+        try (DataOutputStream out = new DataOutputStream(new FileOutputStream(file))) {
+            out.writeInt(map.size());
+            for (Map.Entry<BlockPos, List<BlockPos>> entry : map.entrySet()) {
+                writeBlockPos(out, entry.getKey());
+                List<BlockPos> spawns = entry.getValue();
+                out.writeInt(spawns.size());
+                for (BlockPos pos : spawns) {
+                    writeBlockPos(out, pos);
+                }
             }
         } catch (IOException e) {
-            LOGGER.error("Failed to save alternate_spawns.json", e);
+            LOGGER.error("Failed to save alternate_spawns.dat", e);
         }
+
+        // 🟩 Refresh origin links for all alternates
+        refreshOriginMappings();
     }
 
     public static Map<BlockPos, List<BlockPos>> loadAlternateSpawns() {
-        Map<BlockPos, List<BlockPos>> result = new HashMap<>();
-        if (!ALT_SPAWN_FILE.exists()) return result;
+        File file = new File(CONFIG_DIR, "alternate_spawns.dat");
+        Map<BlockPos, List<BlockPos>> map = new HashMap<>();
 
-        try (FileReader reader = new FileReader(ALT_SPAWN_FILE)) {
-            JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-            for (Map.Entry<String, JsonElement> entry : root.entrySet()) {
-                BlockPos origin = deserializeBlockPos(entry.getKey());
-                List<BlockPos> altList = new ArrayList<>();
-                for (JsonElement elem : entry.getValue().getAsJsonArray()) {
-                    altList.add(deserializeBlockPos(elem.getAsString()));
+        if (file.exists()) {
+            try (DataInputStream in = new DataInputStream(new FileInputStream(file))) {
+                int size = in.readInt();
+                for (int i = 0; i < size; i++) {
+                    BlockPos chest = readBlockPos(in);
+                    int listSize = in.readInt();
+                    List<BlockPos> spawns = new ArrayList<>();
+                    for (int j = 0; j < listSize; j++) {
+                        spawns.add(readBlockPos(in));
+                    }
+                    map.put(chest, spawns);
                 }
-                result.put(origin, altList);
+            } catch (IOException e) {
+                LOGGER.error("Failed to load alternate_spawns.dat", e);
             }
-        } catch (Exception e) {
-            LOGGER.error("Failed to load alternate_spawns.json", e);
         }
 
-        return result;
+        return map;
+    }
+
+    public static Optional<BlockPos> findMatchingAlternateSpawn(BlockPos woolBlockPos) {
+        BlockPos actualSpawn = woolBlockPos.below(); // wool marker is 1 above the spawn
+        Map<BlockPos, List<BlockPos>> altMap = loadAlternateSpawns(); // now always current
+
+        for (Map.Entry<BlockPos, List<BlockPos>> entry : altMap.entrySet()) {
+            for (BlockPos alt : entry.getValue()) {
+                if (alt.equals(actualSpawn)) {
+                    return Optional.of(alt);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    // === Origin Mapping ===
+
+    @SuppressWarnings("unchecked")
+    public static Map<BlockPos, BlockPos> loadOriginMappings() {
+        Map<BlockPos, BlockPos> map = new HashMap<>();
+        if (!ORIGIN_MAPPING_FILE.exists()) return map;
+
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(ORIGIN_MAPPING_FILE))) {
+            Map<String, String> serialized = (Map<String, String>) in.readObject();
+            for (Map.Entry<String, String> entry : serialized.entrySet()) {
+                BlockPos key = deserializePos(entry.getKey());
+                BlockPos value = deserializePos(entry.getValue());
+                map.put(key, value);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to load origin mappings", e);
+        }
+
+        return map;
+    }
+
+    public static void saveOriginMappings(Map<BlockPos, BlockPos> map) {
+        Map<String, String> serialized = new HashMap<>();
+        for (Map.Entry<BlockPos, BlockPos> entry : map.entrySet()) {
+            serialized.put(serializePos(entry.getKey()), serializePos(entry.getValue()));
+        }
+        writeToFile(ORIGIN_MAPPING_FILE, serialized);
+    }
+
+    public static BlockPos getOriginFor(BlockPos pos) {
+        Map<BlockPos, BlockPos> originMap = loadOriginMappings();
+        return originMap.get(pos);
     }
 
     // === Utilities ===
+    public static void refreshOriginMappings() {
+        Map<BlockPos, List<BlockPos>> altSpawns = loadAlternateSpawns();
+        Map<BlockPos, BlockPos> current = loadOriginMappings();
+
+        for (Map.Entry<BlockPos, List<BlockPos>> entry : altSpawns.entrySet()) {
+            BlockPos origin = entry.getKey();
+            for (BlockPos alt : entry.getValue()) {
+                current.put(alt, origin);  // map each alternate back to the origin
+            }
+            current.put(origin, origin); // make sure origin maps to itself
+        }
+
+        saveOriginMappings(current);
+    }
 
     private static void writeToFile(File file, Object data) {
         try {
@@ -149,26 +225,6 @@ public class ChestDataHandler {
             return new BlockPos(x, y, z);
         } catch (NumberFormatException e) {
             LOGGER.error("Invalid BlockPos string: {}", str);
-            return BlockPos.ZERO;
-        }
-    }
-
-    private static String serializeBlockPos(BlockPos pos) {
-        return "[" + pos.getX() + "," + pos.getY() + "," + pos.getZ() + "]";
-    }
-
-    private static BlockPos deserializeBlockPos(String str) {
-        str = str.replace("[", "").replace("]", "");
-        String[] parts = str.split(",");
-        if (parts.length != 3) return BlockPos.ZERO;
-
-        try {
-            int x = Integer.parseInt(parts[0]);
-            int y = Integer.parseInt(parts[1]);
-            int z = Integer.parseInt(parts[2]);
-            return new BlockPos(x, y, z);
-        } catch (NumberFormatException e) {
-            LOGGER.error("Invalid alternate spawn BlockPos string: {}", str);
             return BlockPos.ZERO;
         }
     }

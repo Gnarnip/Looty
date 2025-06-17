@@ -38,7 +38,7 @@
       }
     ]
   },
-  "Vault": {
+  "VAULT": {
     "minItems": 2,
     "maxItems": 4,
     "items": [
@@ -46,7 +46,7 @@
       { "item": "minecraft:emerald", "countMin": 1, "countMax": 1, "chance": 0.3 }
     ]
   },
-  "Shrine": {
+  "SHRINE": {
     "minItems": 1,
     "maxItems": 2,
     "items": [

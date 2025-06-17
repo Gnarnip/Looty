@@ -248,33 +248,41 @@ public class looty {
 
     @SubscribeEvent
     public void onBlockBreak(BlockEvent.BreakEvent event) {
-        if (!(event.getLevel() instanceof Level level)) return;
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
 
         BlockPos pos = event.getPos();
 
-        // Check if the broken block is an admin sign used to mark a loot group
+        // Handle group sign deletion
         if (level.getBlockState(pos).getBlock() == Blocks.OAK_SIGN) {
             String group = LootyMarkerHandler.getGroupNameForSign(pos);
             if (group != null) {
-                // Remove the group from configuration
                 GroupLootConfig.removeGroup(group);
-                // Remove the sign marker
-                LootyMarkerHandler.removeAdminSign((ServerLevel) level, group);
+                LootyMarkerHandler.removeAdminSign(level, group);
                 event.getPlayer().sendSystemMessage(Component.literal("§cGroup '" + group + "' removed by breaking its sign."));
             }
         }
 
-        // Then check for Looty container griefing prevention
-        BlockEntity be = level.getBlockEntity(pos);
-        if (be instanceof RandomizableContainerBlockEntity container) {
-            CompoundTag tag = container.getPersistentData();
-            if (tag.getBoolean("LootyAdmin") && !event.getPlayer().hasPermissions(2)) {
-                event.setCanceled(true); // Prevent griefing of Looty containers by non-ops
-                event.getPlayer().sendSystemMessage(Component.literal(""));
-            }
+        // Handle wool block above alternate spawn
+        if (level.getBlockState(pos).getBlock() == Blocks.RED_WOOL) {
+            ChestDataHandler.findMatchingAlternateSpawn(pos).ifPresent(matchingAlt -> {
+                BlockPos origin = ChestDataHandler.getOriginFor(matchingAlt);
+                if (origin != null) {
+                    Map<BlockPos, List<BlockPos>> map = ChestDataHandler.loadAlternateSpawns();
+                    List<BlockPos> list = map.getOrDefault(origin, new ArrayList<>());
+                    list.remove(matchingAlt);
+
+                    if (list.isEmpty()) {
+                        map.remove(origin);
+                    } else {
+                        map.put(origin, list);
+                    }
+
+                    ChestDataHandler.saveAlternateSpawns(map);
+                    event.getPlayer().sendSystemMessage(Component.literal("§cRemoved alternate spawn at " + matchingAlt.toShortString() + " by breaking wool."));
+                }
+            });
         }
     }
-
 
 
     @SubscribeEvent
@@ -316,61 +324,74 @@ public class looty {
     }
 
 
-    private void respawnChest(BlockPos pos, ServerLevel level) {
-        ResourceLocation id = originalBlockTypes.getOrDefault(pos, ForgeRegistries.BLOCKS.getKey(Blocks.CHEST));
-        Block block = ForgeRegistries.BLOCKS.getValue(id);
+    private void respawnChest(BlockPos currentPos, ServerLevel level) {
+        // Always resolve the origin, even if we're starting from an alternate location
+        BlockPos origin = ChestDataHandler.getOriginFor(currentPos);
+        if (origin == null) origin = currentPos;
 
+        ResourceLocation id = originalBlockTypes.getOrDefault(origin, ForgeRegistries.BLOCKS.getKey(Blocks.CHEST));
+        Block block = ForgeRegistries.BLOCKS.getValue(id);
         if (block == null) return;
 
-        level.setBlock(pos, block.defaultBlockState(), 3);
+        // Load all alternate positions from origin
+        Map<BlockPos, List<BlockPos>> allAlternates = ChestDataHandler.loadAlternateSpawns();
+        List<BlockPos> candidates = new ArrayList<>();
+        candidates.add(origin);
+        candidates.addAll(allAlternates.getOrDefault(origin, Collections.emptyList()));
+
+        // Choose a new random position to respawn
+        BlockPos finalPos = candidates.get(RANDOM.nextInt(candidates.size()));
+        if (!finalPos.equals(currentPos)) {
+            LOGGER.info("Chest at {} is respawning at {}", currentPos, finalPos);
+            level.removeBlock(currentPos, false); // Clean up previous
+        }
+
+        // Place chest at new location
+        level.setBlock(finalPos, block.defaultBlockState(), Block.UPDATE_ALL | Block.UPDATE_CLIENTS);
+
+        // Animation particles
         if (Config.enableRespawnAnimations) {
-            LootRarity rarity = getRarityBasedOnDistance(level, pos);
+            LootRarity rarity = getRarityBasedOnDistance(level, finalPos);
             if (Config.enableFancyRespawnAnimations) {
-                spawnFancyFirework(level, pos, rarity);
+                spawnFancyFirework(level, finalPos, rarity);
             } else {
-                spawnSimpleRespawnParticles(level, pos, rarity);
+                spawnSimpleRespawnParticles(level, finalPos, rarity);
             }
         }
 
-        BlockEntity entity = level.getBlockEntity(pos);
+        // Insert loot
+        BlockEntity entity = level.getBlockEntity(finalPos);
         if (!(entity instanceof RandomizableContainerBlockEntity container)) return;
 
         List<ItemStack> loot;
-
-        GroupLootConfig.GroupData group = GroupLootConfig.getMatchingGroup(pos);
-
+        GroupLootConfig.GroupData group = GroupLootConfig.getMatchingGroup(finalPos);
         if (group != null) {
             if (group.lootTable != null) {
                 loot = LootTableLoader.getRandomizedLoot(group.lootTable);
-                LOGGER.info("Respawning chest at {} matched group with custom loot table '{}'", pos, group.lootTable);
+                LOGGER.info("Matched group with custom table '{}'", group.lootTable);
             } else if (group.rarity != null) {
                 loot = LootTableLoader.getRandomizedLoot(group.rarity);
-                LOGGER.info("Respawning chest at {} matched group with rarity '{}'", pos, group.rarity);
+                LOGGER.info("Matched group with rarity '{}'", group.rarity);
             } else {
-                LootRarity fallback = getRarityBasedOnDistance(level, pos);
+                LootRarity fallback = getRarityBasedOnDistance(level, finalPos);
                 loot = LootTableLoader.getRandomizedLoot(fallback.name());
-                LOGGER.info("Group matched but had no loot info. Using fallback '{}'", fallback.name());
+                LOGGER.info("Group matched, fallback to '{}'", fallback.name());
             }
         } else {
-            LootRarity fallback = getRarityBasedOnDistance(level, pos);
+            LootRarity fallback = getRarityBasedOnDistance(level, finalPos);
             loot = LootTableLoader.getRandomizedLoot(fallback.name());
-            LOGGER.info("No group matched. Using fallback distance rarity '{}'", fallback.name());
+            LOGGER.info("No group, fallback to '{}'", fallback.name());
         }
 
-
-
-        // Finalize loot assignment
+        // Fill chest with loot
         for (int i = 0; i < Math.min(loot.size(), container.getContainerSize()); i++) {
             container.setItem(i, loot.get(i));
         }
 
         container.getPersistentData().putBoolean("LootyAdmin", true);
         container.setChanged();
-        level.sendBlockUpdated(pos, block.defaultBlockState(), block.defaultBlockState(), 3);
+        level.sendBlockUpdated(finalPos, block.defaultBlockState(), block.defaultBlockState(), 3);
     }
-
-
-
 
     private long getRandomRespawnTime() {
         List<Long> times = getRespawnTimes();
@@ -396,7 +417,6 @@ public class looty {
         LOGGER.info("Despawned chest at {} — will respawn in {} ticks", pos, respawnTime - level.getGameTime());
     }
 
-
     private LootRarity getRarityBasedOnDistance(ServerLevel level, BlockPos pos) {
         for (String group : GroupLootConfig.getGroupNames()) {
             String rarityMatch = GroupLootConfig.getRarityForPosition(group, pos);
@@ -417,11 +437,11 @@ public class looty {
         return LootRarity.LEGENDARY;
     }
 
-
     public enum LootRarity {
         COMMON, UNCOMMON, RARE, LEGENDARY
 
     }
+
     private void spawnFancyFirework(ServerLevel level, BlockPos pos, LootRarity rarity) {
         int color = switch (rarity) {
             case COMMON -> 0xFFFFFF;
@@ -457,8 +477,6 @@ public class looty {
         level.addFreshEntity(rocket);
     }
 
-
-
     private void spawnSimpleRespawnParticles(ServerLevel level, BlockPos pos, LootRarity rarity) {
         ParticleOptions particle = switch (rarity) {
             case COMMON -> ParticleTypes.GLOW;
@@ -474,6 +492,7 @@ public class looty {
             level.sendParticles(particle, pos.getX() + 0.5, pos.getY() + 0.7, pos.getZ() + 0.5, 1, dx, dy, dz, 0.1);
         }
     }
+
     @SubscribeEvent
     public void onLeftClickBlock(PlayerInteractEvent.LeftClickBlock event) {
         Level level = event.getLevel();
@@ -486,6 +505,8 @@ public class looty {
         if (!stack.is(Items.GOLDEN_HOE)) return;
         if (!event.getEntity().hasPermissions(2)) return;
 
+        if (!(event.getEntity() instanceof ServerPlayer serverPlayer)) return;
+
         BlockPos pos = event.getPos();
         BlockState state = level.getBlockState(pos);
         ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(state.getBlock());
@@ -495,21 +516,46 @@ public class looty {
         BlockEntity blockEntity = serverLevel.getBlockEntity(pos);
         if (!(blockEntity instanceof RandomizableContainerBlockEntity)) return;
 
-        if (!(event.getEntity() instanceof ServerPlayer serverPlayer)) return;
+        Map<BlockPos, List<BlockPos>> all = ChestDataHandler.loadAlternateSpawns();
 
-        BlockPos linked = LootyAccess.getLinkedLootyChest(serverPlayer);
-
-        if (linked != null && linked.equals(pos)) {
-            LootyAccess.setLinkedLootyChest(serverPlayer, null);
-            LootyBannerHandler.removeSavedAlternateSpawns(serverLevel, serverPlayer);
-            serverPlayer.displayClientMessage(Component.literal("§cUnlinked from Looty chest."), true);
-        } else {
+        // Case 1: Clicked is the original chest
+        if (all.containsKey(pos)) {
             LootyAccess.setLinkedLootyChest(serverPlayer, pos);
-            LootyBannerHandler.showSavedAlternateSpawns(serverLevel, pos, serverPlayer);
-            serverPlayer.displayClientMessage(Component.literal("§6Linked to Looty chest at " + pos.toShortString()), true);
+            LootyBannerHandler.placeSavedAlternateSpawns(serverLevel, serverPlayer, all.get(pos));
+            serverPlayer.displayClientMessage(Component.literal("§aLinked to original Looty chest at §7" + pos.toShortString()), true);
+            event.setCanceled(true);
+            return;
         }
 
-        event.setCanceled(true); // Prevent breaking the block
+        // Case 2: Clicked is one of the alternate spawn locations
+        for (Map.Entry<BlockPos, List<BlockPos>> entry : all.entrySet()) {
+            if (entry.getValue().contains(pos)) {
+                BlockPos origin = entry.getKey();
+                LootyAccess.setLinkedLootyChest(serverPlayer, origin);
+                LootyBannerHandler.placeSavedAlternateSpawns(serverLevel, serverPlayer, entry.getValue());
+                serverPlayer.displayClientMessage(Component.literal("§aLinked to alternate Looty chest at §7" + pos.toShortString() +
+                        " §7(Origin: " + origin.toShortString() + ")"), true);
+                event.setCanceled(true);
+                return;
+            }
+        }
+
+        // Case 3: Already linked, toggle off
+        BlockPos linked = LootyAccess.getLinkedLootyChest(serverPlayer);
+        if (linked != null) {
+            Map<BlockPos, List<BlockPos>> saved = ChestDataHandler.loadAlternateSpawns();
+            List<BlockPos> spawns = saved.getOrDefault(linked, List.of());
+            LootyBannerHandler.removeSavedAlternateSpawns(serverPlayer.serverLevel(), spawns); // ✅ correct
+        }
+
+
+        // Case 4: Standalone looty chest (no alternates) — allow linking
+        LootyAccess.setLinkedLootyChest(serverPlayer, pos);
+        Map<BlockPos, List<BlockPos>> saved = ChestDataHandler.loadAlternateSpawns();
+        List<BlockPos> spawns = saved.getOrDefault(linked, List.of());
+        LootyBannerHandler.removeSavedAlternateSpawns(serverLevel, spawns);
+        serverPlayer.displayClientMessage(Component.literal("§aLinked to solo Looty chest at §7" + pos.toShortString()), true);
+        event.setCanceled(true);
     }
 
     private void spawnDespawnSmoke(ServerLevel level, BlockPos pos) {
@@ -521,7 +567,5 @@ public class looty {
             level.sendParticles(ParticleTypes.SMOKE, pos.getX() + 0.5, pos.getY() + 0.6, pos.getZ() + 0.5, 1, dx, dy, dz, 0.01);
 
         }
-
     }
-
 }

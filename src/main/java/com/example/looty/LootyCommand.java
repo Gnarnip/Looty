@@ -8,13 +8,14 @@ import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.StandingSignBlock;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import com.example.looty.GroupLootConfig.GroupData;
 
 import java.util.*;
-
-import com.example.looty.GroupLootConfig.GroupData;
 
 @Mod.EventBusSubscriber
 public class LootyCommand {
@@ -90,15 +91,45 @@ public class LootyCommand {
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .executes(ctx -> {
                                     String name = StringArgumentType.getString(ctx, "name");
-                                    boolean removed = GroupLootConfig.removeGroup(name);
-                                    if (removed) {
-                                        LootyMarkerHandler.removeAdminSign(ctx.getSource().getLevel(), name);
-                                        ctx.getSource().sendSuccess(() -> Component.literal("§cGroup '" + name + "' removed."), true);
-                                    } else {
-                                        ctx.getSource().sendFailure(Component.literal("§cGroup '" + name + "' not found."));
+
+                                    GroupData group = GroupLootConfig.getGroup(name);
+                                    if (group == null) {
+                                        ctx.getSource().sendFailure(Component.literal("§cGroup '" + name + "' does not exist."));
+                                        return 0;
                                     }
+
+                                    BlockPos signPos = group.center;
+                                    if (signPos != null && ctx.getSource().getLevel().getBlockState(signPos).getBlock() instanceof StandingSignBlock) {
+                                        ctx.getSource().getLevel().setBlockAndUpdate(signPos, Blocks.AIR.defaultBlockState());
+                                    }
+
+                                    GroupLootConfig.removeGroup(name);
+                                    LootyMarkerHandler.removeAdminSign(ctx.getSource().getLevel(), name);
+
+                                    ctx.getSource().sendSuccess(() -> Component.literal("§cGroup '" + name + "' and its sign were removed."), true);
                                     return 1;
                                 })))
+
+                .then(Commands.literal("unlink")
+                        .executes(ctx -> {
+                            CommandSourceStack source = ctx.getSource();
+                            if (!(source.getEntity() instanceof ServerPlayer serverPlayer)) {
+                                source.sendFailure(Component.literal("§cThis command must be run by a player."));
+                                return 0;
+                            }
+
+                            BlockPos linked = LootyAccess.getLinkedLootyChest(serverPlayer);
+                            if (linked == null) {
+                                serverPlayer.sendSystemMessage(Component.literal("§cYou are not linked to any Looty chest."));
+                                return 1;
+                            }
+
+                            // Just remove markers and unlink, don't delete saved spawns
+                            LootyBannerHandler.clearGhostMarkers(serverPlayer);
+                            LootyAccess.setLinkedLootyChest(serverPlayer, null);
+                            serverPlayer.sendSystemMessage(Component.literal("§cUnlinked from Looty chest and cleared visual markers."));
+                            return 1;
+                        }))
 
                 .then(Commands.literal("listgroups")
                         .executes(ctx -> {
@@ -124,26 +155,6 @@ public class LootyCommand {
                             return 1;
                         }))
 
-                .then(Commands.literal("unlink")
-                        .executes(ctx -> {
-                            CommandSourceStack source = ctx.getSource();
-                            if (!(source.getEntity() instanceof ServerPlayer player)) {
-                                source.sendFailure(Component.literal("§cThis command must be run by a player."));
-                                return 0;
-                            }
-
-                            BlockPos linked = LootyAccess.getLinkedLootyChest(player);
-                            if (linked == null) {
-                                player.sendSystemMessage(Component.literal("§cYou are not linked to any Looty chest."));
-                                return 1;
-                            }
-
-                            LootyAccess.setLinkedLootyChest(player, null);
-                            LootyBannerHandler.removeSavedAlternateSpawns(player.serverLevel(), player);
-                            player.sendSystemMessage(Component.literal("§cUnlinked from Looty chest."));
-                            return 1;
-                        }))
-
                 .then(Commands.literal("addspawns")
                         .executes(ctx -> {
                             CommandSourceStack source = ctx.getSource();
@@ -164,12 +175,12 @@ public class LootyCommand {
                                 return 1;
                             }
 
-                            // Save to alternate spawn cache
                             Map<BlockPos, List<BlockPos>> batch = ChestDataHandler.loadAlternateSpawns();
                             batch.put(chest, new ArrayList<>(selected));
                             ChestDataHandler.saveAlternateSpawns(batch);
 
                             LootyAccess.clearSelectedSpawns(player);
+                            LootyBannerHandler.placeSavedAlternateSpawns(player, selected);
                             player.sendSystemMessage(Component.literal("§aSaved §e" + selected.size() + " §aalternate spawn(s) to Looty chest §7" + chest));
                             return 1;
                         }))
