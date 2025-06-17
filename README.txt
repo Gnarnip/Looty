@@ -1,108 +1,125 @@
-📜 WELCOME TO LOOTY 📜
-A Dynamic Chest Loot Respawning System for Minecraft
+# 🧰 Looty — Dynamic, Respawning Loot Chests for Minecraft
 
-🔹 What is Looty?
-Looty is a Minecraft mod that allows chests in your world to despawn and respawn with fresh loot,
-making exploration more engaging and rewarding. It supports custom loot tables and structure-based chest identification,
-ensuring that dungeons, villages, strongholds, and other locations have unique loot pools.
+Looty is a server-side Minecraft mod that brings life back to the loot system. It creates **immersive, respawning loot containers** (chests, barrels, shulker boxes) with configurable randomness, rarity, and distance-based progression — all driven by JSON.
 
-With Looty, abandoned structures never run dry, and looting always stays exciting!
+> Think of it as Minecraft’s **loot system on steroids**, with the brains of a mod and the charm of a Dungeon Master.
 
-📦 LOOTY CONFIGURATION
-Looty is fully customizable through looty_config.json and per-structure loot tables (.json files in the config/ folder).
+---
 
-These settings control global loot behavior, loot table management, and chest respawn mechanics.
+## 🎯 Key Features
 
-🔧 GLOBAL LOOTY MODE
-The setting: "enable_global_looty": false (default)
-Set to true to make EVERY chest in the game a Looty chest (not just structures).
-In this mode, any chest placed by a player will not be affected.
-🔹 Admin Command: /looty_toggle_all → Toggles Global Looty mode. 🔹
+### 🧭 Dynamic Loot Respawn System
+- Loot containers despawn and **respawn after a configurable cooldown**.
+- Loot is never static — it’s freshly generated each time from defined rarity or group-based rules.
+- **Supports chests, barrels, and shulkers**, each remembering their original block type.
 
-📝 LOOT TABLES: How Chests Generate Loot
-Looty uses 4 rarity tiers to determine loot spawns in the world:
+### 📦 Rarity-Based Loot
+- Loot rarity is based on **distance from world spawn** (`distance_config.json`):
+  - `COMMON`, `UNCOMMON`, `RARE`, `LEGENDARY`
+- Each rarity tier supports:
+  - Min/max item count
+  - Per-item spawn chances
+  - NBT data, enchantments, and modded items
 
-✨ Tier	 Distance from Spawn	Loot Type:
-- COMMON	0 - 1000 blocks	Basic loot (food, wood, stone tools)
-- UNCOMMON	2000 - 2999 blocks	Better loot (iron, gold, enchanted books)
-- RARE	3000 - 3999 blocks	Strong loot (diamonds, potions, nether items)
-- LEGENDARY	4000+ blocks	Ultra-rare loot (netherite, beacons, enchanted gear)
-Each rarity tier has a dedicated loot pool, controlled in looty_config.json.
+### 🏷️ Group-Based Loot Overrides
+- Admins can place signs using `/looty addgroup <name> <radius> <rarity|loottable>`
+- Any Looty container within the radius uses that group’s rarity or custom loot table
+- Perfect for custom areas like dungeons, towns, or world events
 
+### 📍 Alternate Respawn Positions
+- Admins can link a Looty chest and **select up to 9 alternate spawn locations**
+- Chest respawns at **random** among its origin + selected spawns
+- `/looty addspawns` to save selections
 
-💡 Example Loot Entry:
-json
-{ "item": "minecraft:diamond", "count": 1, "chance": 20 }
-"count" → The quantity of this item given when selected.
-"chance" → The % probability (0-100%) that this item appears.
-🔹 If "chance": 50, then the item will spawn in 50% of chests that roll this loot table. 🔹
+### ✨ Visual Feedback (For Admins)
+- Shift + Left/Right Click with a golden hoe to:
+  - Link a Looty container
+  - Select alternate spawn locations
+- Glowing red wool markers show alternate spawn spots (visible only to admins)
+- `/looty unlink` clears your linked chest and removes the ghost markers
 
-🏰 STRUCTURE-BASED LOOT
-Looty automatically recognizes chests in structures and assigns loot based on their location.
+### 💥 Particle Animations
+- Chests **despawn with smoke**, and **respawn with fireworks or colored particles**
+- Configurable via `looty_config.json`:
+  - Toggle despawn/respawn animation
+  - Switch between **"fancy fireworks"** and **"minimal particles"**
 
-📌 Supported Structures & Custom Loot Tables:
-- Structure	Custom Loot Table
-- Dungeons	dungeon_looty.json
-- Strongholds	stronghold_looty.json
-- Villages	village_looty.json
-- Bastions	bastion_looty.json
-- Ruined Portals	ruined_portal_looty.json
-- Desert Temples	desert_temple_looty.json
-- Jungle Temples	jungle_temple_looty.json
-- Shipwrecks	shipwreck_looty.json
-- End Cities	end_city_looty.json
-- Woodland Mansions	woodland_mansion_looty.json
-🛠️ Each structure has its own loot table in config/
+### 🧠 Fully JSON-Driven Configs
+- `looty_config.json`: Define loot for each rarity (min/max items, chance, NBT)
+- `group_config.json`: Define groups by name, center, radius, rarity or loot table
+- `distance_config.json`: Distance thresholds for rarity tiers
+- No code changes needed — server owners control it all!
 
-Modify these .json files to customize loot per structure!
-Loot does not override player-placed chests.
+---
 
-💡 Example (bastion_looty.json)
-json
-{
-  "LEGENDARY": [
-    { "item": "minecraft:netherite_scrap", "count": 1, "chance": 25 },
-    { "item": "minecraft:ancient_debris", "count": 2, "chance": 30 }
-  ],
-  "RARE": [
-    { "item": "minecraft:gold_block", "count": 1, "chance": 50 }
-  ]
-}
-📌 This means Bastion chests have a 25% chance to contain Netherite Scrap and a 50% chance to contain Gold Blocks!
+## 🔧 Admin Tools & Commands
 
-⚙️ LOOTY COMMANDS (Admin Only)
-Looty includes powerful server commands for admins:
-Admin Command Effect:
+| Command | Description |
+|--------|-------------|
+| `/looty reload` | Reloads all configs live |
+| `/looty toggleall` | Enable or disable all chests as Looty containers |
+| `/looty setgroup <name>` | Sets your feet position as center of a group |
+| `/looty addgroup <name> <radius> <rarity/table>` | Adds a loot group and places a sign |
+| `/looty del <name>` | Deletes a group and its marker sign |
+| `/looty addspawns` | Saves your selected alternate spawn positions |
+| `/looty unlink` | Unlinks from chest and removes ghost markers |
+| `/looty listgroups` | Lists all defined loot groups |
 
-/looty_toggle_all	Toggles Global Looty mode (all chests auto-loot)
-/looty_scan_structures	Scans all loaded chunks for Looty-eligible structure chests.
+---
 
-✨ HOW DOES LOOTY WORK?
-1️⃣ Chests in structures are automatically marked as LootyAdmin.
-2️⃣ When a Looty chest is opened, it starts a 30-second despawn timer.
-3️⃣ Chests despawn and will respawn at randomized intervals between 15 - 60 minutes.
-4️⃣ New loot is generated based on either:
+## 📁 File Structure
 
-Rarity tier (distance from spawn)
-Structure-specific loot tables (if part of a dungeon, stronghold, etc.)
-5️⃣ Players can still place their own chests, which Looty will ignore.
-📌 FAQ & TROUBLESHOOTING
-❓ Q: Can I add modded items to Looty?
-✅ Yes! Simply add the correct modid:item_name into the .json files.
+- `config/looty_config.json` → Loot tables by rarity
+- `config/group_config.json` → Group-based override data
+- `config/distance_config.json` → Rarity distance thresholds
+- `config/looty_containers.json` → Valid blocks (chests, barrels, shulkers)
+- `looty_data/` → Runtime state: despawned chests, original blocks, alt spawns, group signs
 
-Example (for a modded sword from "mymod"):
+---
 
-json
-{ "item": "mymod:epic_sword", "count": 1, "chance": 10 }
-❓ Q: What happens if I remove all loot from a category?
-⚠️ If you remove ALL loot from a category, chests may spawn empty!
-Make sure each loot tier has at least one item available.
+## 💡 Ideal For:
 
-❓ Q: Can I make certain chests NOT respawn?
-✅ Yes! If a chest was placed by a player, it will NOT be affected.
+- PvE & RPG servers
+- Survival games with **territory-based loot zones**
+- Dungeon & event-driven worlds
+- Loot randomization without relying on loot tables alone
 
-❤️ THANK YOU FOR USING LOOTY!
-📌 Have suggestions? I’d love to hear them!
-📢 Custom server with Looty support coming soon! Stay tuned!
+---
 
-- hooshcow 🚜✨
+## 🧪 Compatibility
+
+✅ Works with:
+- Modded items and NBT
+- All dimensions (Overworld, Nether, etc.)
+- Multiplayer servers
+- Compatible with most structure mods
+
+🚫 Not tested with:
+- Mods that overwrite container logic (e.g., Lootr)
+- Non-container loot entities (e.g., mobs or drops)
+
+---
+
+## 📦 Future Goals
+
+- In-game GUI loot editor
+- Per-player loot memory (optional)
+- JEI integration
+- Integration with quest/event mods
+
+---
+
+## 🪙 Credits
+
+Made with ♥ by the Looty Dev Team  
+Inspired by the spirit of **Clippy**, reimagined as a cheeky Minecraft chest.  
+“Looks like you’re trying to build a dungeon... need some loot with that?”
+
+---
+
+## 🧠 Need Help?
+
+Create an issue or ping us on GitHub. Contributions and suggestions are always welcome.
+
+---
+
