@@ -165,7 +165,7 @@ public class looty {
                     5, 0.25, 0.25, 0.25, 0.01);
 
             event.setCanceled(true);
-            return; // important: don’t continue with Looty container checks
+            return; // important: don’t continue with Looty container checks. poop.
         }
 
         if (blockId == null || !lootyContainerBlocks.contains(blockId)) return;
