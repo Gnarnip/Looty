@@ -111,8 +111,7 @@ Looty is a server-side Minecraft mod that brings life back to the loot system. I
 
 ## 🪙 Credits
 
-Made with ♥ by the Looty Dev Team  
-Inspired by the spirit of **Clippy**, reimagined as a cheeky Minecraft chest.  
+Made with ♥ by the Looty Dev Team - hooshcow.
 “Looks like you’re trying to build a dungeon... need some loot with that?”
 
 ---
