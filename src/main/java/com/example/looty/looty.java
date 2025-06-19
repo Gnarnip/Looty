@@ -49,7 +49,7 @@ public class looty {
     private final Map<BlockPos, ResourceLocation> originalBlockTypes = ChestDataHandler.loadOriginalBlockTypes();
     private final Map<String, Integer> rarityDistances = new HashMap<>();
     private static final Random RANDOM = new Random();
-
+    private static final Map<UUID, Long> lastClickTick = new HashMap<>();
     private static final List<Long> RESPAWN_TIMES = Arrays.asList(
             5L * 20,   // 5 seconds
             10L * 20,  // 10 seconds
@@ -131,13 +131,20 @@ public class looty {
         BlockPos pos = event.getPos();
         if (level.isClientSide()) return;
 
-        BlockState state = level.getBlockState(pos);
-        ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(state.getBlock());
-        if (event.getEntity().isShiftKeyDown()
-                && event.getEntity().getMainHandItem().is(Items.GOLDEN_HOE)
-                && event.getEntity() instanceof ServerPlayer player
-                && level instanceof ServerLevel serverLevel
-                && player.hasPermissions(2)) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (!(level instanceof ServerLevel serverLevel)) return;
+
+        UUID playerId = player.getUUID();
+        long gameTick = serverLevel.getGameTime();
+        if (player.isShiftKeyDown() &&
+                player.getMainHandItem().is(Items.GOLDEN_HOE) &&
+                player.hasPermissions(2)) {
+
+            // Prevent double toggling in same tick
+            if (lastClickTick.getOrDefault(playerId, -1L) == gameTick) {
+                return;
+            }
+            lastClickTick.put(playerId, gameTick);
 
             BlockPos clickedPos = event.getPos();
 
@@ -165,50 +172,23 @@ public class looty {
                     5, 0.25, 0.25, 0.25, 0.01);
 
             event.setCanceled(true);
-            return; // important: don’t continue with Looty container checks.
-        }
-
-        if (blockId == null || !lootyContainerBlocks.contains(blockId)) return;
-
-        ServerLevel server = (ServerLevel) level;
-
-        if (event.getEntity().getMainHandItem().is(Items.GOLDEN_HOE) && event.getEntity().hasPermissions(2)) {
-            toggleAdminChest(pos, server, event);
             return;
         }
 
-        if (Config.enableAllLootyChests || isAdminChest(pos, server)) {
-            despawnTimers.put(pos, server.getGameTime() + 600);
-            if (event.getEntity().isShiftKeyDown() && event.getEntity().getMainHandItem().is(Items.GOLDEN_HOE)) {
-                if (event.getEntity() instanceof ServerPlayer player && level instanceof ServerLevel serverLevel) {
-                    BlockPos clickedPos = event.getPos();
+        ResourceLocation blockId = ForgeRegistries.BLOCKS.getKey(level.getBlockState(pos).getBlock());
+        if (blockId == null || !lootyContainerBlocks.contains(blockId)) return;
 
-                    if (!LootyAccess.isLinked(player)) {
-                        player.sendSystemMessage(Component.literal("§cLink to a Looty chest first (Shift + Left Click)."));
-                        return;
-                    }
+        if (player.getMainHandItem().is(Items.GOLDEN_HOE) && player.hasPermissions(2)) {
+            toggleAdminChest(pos, serverLevel, event);
+            return;
+        }
 
-                    if (LootyAccess.isSelected(player, clickedPos)) {
-                        LootyAccess.removeSelectedSpawn(player, clickedPos);
-                        player.sendSystemMessage(Component.literal("§eUnselected block at " + clickedPos.toShortString()));
-                    } else {
-                        if (LootyAccess.getSelectedSpawns(player).size() >= 9) {
-                            player.sendSystemMessage(Component.literal("§cYou can only select up to 9 alternate spawn positions."));
-                            return;
-                        }
-                        LootyAccess.addSelectedSpawn(player, clickedPos);
-                        player.sendSystemMessage(Component.literal("§aSelected block at " + clickedPos.toShortString()));
-                    }
-
-                    // Optional: Add particle effect here for feedback
-                    serverLevel.sendParticles(ParticleTypes.GLOW, clickedPos.getX() + 0.5, clickedPos.getY() + 1.2, clickedPos.getZ() + 0.5, 5, 0.25, 0.25, 0.25, 0.01);
-
-                    event.setCanceled(true);
-                }
-            }
-
+        if (Config.enableAllLootyChests || isAdminChest(pos, serverLevel)) {
+            despawnTimers.put(pos, serverLevel.getGameTime() + 600);
         }
     }
+
+
 
     private void toggleAdminChest(BlockPos pos, ServerLevel level, PlayerInteractEvent event) {
         BlockEntity entity = level.getBlockEntity(pos);
